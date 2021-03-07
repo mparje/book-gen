@@ -69,7 +69,9 @@ def verify(character, left_context, right_context):
 
     # Verify that the character is one we can check for
     if character not in defined:
-        print("Error in /verify/: Checks for {} have not been defined".format(character), file=sys.stderr)
+        print("Error in /verify/: Checks for {} (hex {}) have not been defined".format(character,
+                                                                                       hex(ord(character))),
+              file=sys.stderr)
         return False
 
     # Verification for em dash: must have letters to left and right (no num, no punct, no space?)
@@ -220,7 +222,8 @@ def main():
     char_inventory = getinventory(lines)
     prettyprint(sorted(char_inventory))
     # Limit the characters to be checked to only those that are found in the document
-    chars_to_check = sorted(list(char_inventory.intersection(CHARS_WORTH_CHECKING) | char_inventory.difference([chr(i) for i in range(128)])))
+    chars_to_check = sorted(list(char_inventory.intersection(CHARS_WORTH_CHECKING)
+                                 | char_inventory.difference([chr(i) for i in range(128)])))
     exitcode = runchecks(lines, chars_to_check)
     if exitcode == 0:
         print("Finished with no errors.")
