@@ -28,12 +28,13 @@ CHARS_WORTH_CHECKING = set([chr(8211),  # &ndash;
                             chr(8216),  # &lsquo; ‘
                             chr(8217),  # &rsquo; ’
                             chr(8220),  # &ldquo; “
-                            chr(8221)]) # &rdquo; ”
+                            chr(8221),  # &rdquo; ”
+                            chr(8230)]) # &hellip; …
 
-# TODO: add checks for 8230 … versus ..., 9674 ◊ in threes
+# TODO: add checks for ... instead of &hellip;, 9674 ◊ in threes
 
 # Punctuation in use
-PUNCTUATION = set(['.', ',', '?', '!'])
+PUNCTUATION = set(['.', ',', '?', '!', '—', '…'])
 
 # the number of characters to display to the left and right of a character of interest
 SNIPPET_RADIUS = 10
@@ -56,16 +57,18 @@ def findall_blank(string):
 
 def verify(character, left_context, right_context):
     """
-    Verify that the character is properly used in this context. Currently defined only for:
+    Returns a truth value indicating whether a character is properly used
+    in the supplied context. Currently defined only for:
         em dash
         en dash
         left single and double quote
         right single and double quote
+        horizontal ellipsis
     """
     #   different file checking for (space chr(32)), just look for doubles?
     #   likewise different checking for ... versus ellipsis?
 
-    defined = [chr(8211), chr(8212), chr(8216), chr(8217), chr(8220), chr(8221)] # en dash, em dash, lsquo, rsquo, ldquo, rdquo
+    defined = [chr(8211), chr(8212), chr(8216), chr(8217), chr(8220), chr(8221), chr(8230)] # en dash, em dash, lsquo, rsquo, ldquo, rdquo, hellip
 
     # Verify that the character is one we can check for
     if character not in defined:
@@ -74,16 +77,37 @@ def verify(character, left_context, right_context):
               file=sys.stderr)
         return False
 
+    # Verification for ellipsis: can be enclosed by square brackets on both sides,
+    #                            or alpha-space on left and right,
+    #                            or alpha-space on one side and quotation mark on the other
+    if character == chr(8230):
+        # If the left or right context is less than two chars, pad it with space
+        # to avoid error below
+        if len(left_context) < 2:
+            left_context = (2 - len(left_context)) * " " + left_context
+        if len(right_context) < 2:
+            right_context = right_context + (2 - len(right_context)) * " "
+        return (left_context[-1] == "[" and right_context[0] == "]") or \
+               (left_context[-2].isalpha() and left_context[-1].isspace() \
+                and right_context[0].isspace() and right_context[1].isalpha()) or \
+               (left_context[-2].isalpha() and left_context[-1].isspace() \
+                and right_context[0] == (chr(8221) or chr(8217))) or\
+               (left_context[0] ==  (chr(8220) or chr(8216)) \
+                and right_context[0].isspace() and right_context[1].isalpha())
+
     # Verification for em dash: must have letters to left and right (no num, no punct, no space?)
     if character == chr(8212):
         return left_context[-1].isalpha() and right_context[0].isalpha()
 
     # Verification for en dash: must be symmetric, either both alpha or both alpha-space?
+    # TODO: This isn't quite right, so needs to be changed, but it's complicated
+    # (reference https://www.thepunctuationguide.com/en-dash.html)
     if character == chr(8211):
         return (left_context[-1].isalpha() and right_context[0].isalpha()) or \
-               (left_context[-2].isalpha() and left_context[-1].isspace() and right_context[0].isspace() and right_context[1].isalpha())
+               (left_context[-2].isalpha() and left_context[-1].isspace() \
+                and right_context[0].isspace() and right_context[1].isalpha())
 
-    # Interrupted quotes should be em dash, or en dash?
+    # TODO: Interrupted quotes should be em dash
 
     # Verification for left single quote OR left double quote: to left is space, to right is alpha (not alphanumeric?)
     if character == chr(8216) or character == chr(8220):
@@ -140,6 +164,21 @@ def runchecks(lines, charlist):
         if print_for_this_line:
             print("")
     print("Done with blanks check.\n")
+
+    # Run check for bad periods: two periods, or
+    # three periods (space-padded or not) instead of ellipsis
+    print("Checking for bad periods and unconverted ellipses:")
+    two_periods, unpadded, padded = "..", "...", ". . ."
+    found_in_lines = {index + 1 for index, line in enumerate(lines) \
+        if (two_periods in line or unpadded in line or padded in line)}
+    if len(found_in_lines) > 0:
+        print_list = sorted(list(found_in_lines))
+        print("   Possible bad periods or unconverted ellipses found in lines:")
+        print("   ", end="")
+        print(*print_list, sep = ", ")
+    else:
+        print("   No bad periods or suspicious unconverted ellipses found.")
+    print("Done with bad period and unconverted ellipsis check.\n")
 
     # Run additional checks for elements in charlist
     for item in charlist:
